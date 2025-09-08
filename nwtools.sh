@@ -49,24 +49,63 @@ displaysubmenu() {
 
 is_digit() { [[ "$1" == <-> ]]; } 
 
+
+typeset submenuinputret
+submenuinput() { # (default, submenu#)
+    local input
+    read input
+    case $input in;
+        '')
+            info "Defaulting value to ${1}"
+            submenuinputret=$1
+            ;;
+        "b") displaysubmenu $2;;
+        *)
+            submenuinputret=$input
+    esac
+}
+
 loadtest() {
     displaysubmenu 1
     
     case $subchoice in;
         1)
+            local default=(4 10000 "1m")
+            local defaulttxt=(
+                "Enter number of threads to use: " 
+                "Enter number of connections to use: " 
+                "Enter duration: " 
+            )
+            local target i
+            local param=()
+
             clear
-            local threads connections duration target
-            print -n -- "Enter number of threads to use: "
-            read -k1 threads
-            print -n -- "\nEnter number of connections to use: "
-            read connections
-            print -n -- "Enter duration: "
-            read duration
+            for ((i=1; i<4; i++)); do
+                print -n -- "${defaulttxt[$i]}"
+                submenuinput $default[$i] 1
+
+                if ((i == 2)); then
+                    maxfiles=$(sysctl -n kern.maxfilesperproc)
+                    if ((submenuinputret > maxfiles)); then
+                        err "Exceeded maximum files per process"
+                        info "Setting number of connections to 90%% of maximum value..."
+                        param+=$((maxfiles * 90 / 100))
+                    else
+                        param+="$submenuinputret"
+                    fi
+                else
+                    param+="$submenuinputret"
+                fi
+            done
+
             print -n -- "Enter target: https://"
             read target
+            if [[ $target == 'b' ]]; then 
+                displaysubmenu 1
+            fi
             print
             
-            wrk -t"${threads}" -c"${connections}" -d"${duration}" "https://${target}"
+            wrk -t"${param[1]}" -c"${param[2]}" -d"${param[3]}" "https://${target}"
             ;;
         2)
             clear
@@ -79,14 +118,15 @@ loadtest() {
             read target
             print
 
-            if gitslowloris; then
+            if $gitslowloris; then
                 cd $HOME/scripts/slowloris
+                python3 slowloris.py -s $sockets -ua --sleeptime $sleep "https://${target}"
+            else
+                slowloris -s $sockets -ua --sleeptime $sleep "https://${target}"
             fi
-
-            slowloris -s $sockets -ua --sleeptime $sleep "https://${target}"
             ;;
         q)
-            info "Exiting..."
+            info "\nExiting..."
             exit 1
     esac
 }
@@ -145,11 +185,12 @@ compat() {
             print
 
             if [[ "$option" == [Yy] ]]; then
-                git clone https://github.com/gkbrk/slowloris.git $HOME/scripts
+                git clone https://github.com/gkbrk/slowloris.git $HOME/scripts/slowloris
+                gitslowloris=true
+            else 
+                info "Attempting to install slowloris..."
+                pip3 install slowloris
             fi
-
-            info "Attempting to install slowloris..."
-            pip3 install slowloris
         fi
     fi
 }
@@ -160,9 +201,11 @@ while true; do
     case $choice in;
         1) loadtest;;
         q) 
-            info "Exiting..."
+            info "\nExiting..."
             exit 1
             ;;
+        *)
+            displaymenu
     esac
 done
 
