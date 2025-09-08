@@ -5,6 +5,9 @@
 ### Run once per script
 ```chmod +x script_name_goes_here```
 ### To run script
-```./script_name_goes_here```
+```
+cd scripts
+./script_name_goes_here
+```
 
 Use responsibly.
