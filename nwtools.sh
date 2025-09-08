@@ -7,6 +7,7 @@ info()  { print -P "%B%F{blue}$*%f%b"; }
 dim()   { print -P "%F{black}$*%f"; }
 
 typeset choice subchoice
+gitslowloris=false
 menus=("Server Load Test")
 submenus=("wrk slowloris")
 titles=("Server Load Test")
@@ -78,17 +79,19 @@ loadtest() {
             read target
             print
 
+            if gitslowloris; then
+                cd $HOME/scripts/slowloris
+            fi
+
             slowloris -s $sockets -ua --sleeptime $sleep "https://${target}"
             ;;
         q)
             info "Exiting..."
             exit 1
     esac
-
-        }
+}
 
 clear
-
 info "Checking compatibility..."
 
 compat() {
@@ -132,16 +135,22 @@ compat() {
     else
         err "slowloris is NOT installed"
         local option
-        print -n -- "Use git instead? (y/N)"
-        read option
 
-        if $option -eq [Yy]; then
-            print "Currently in development"
-            exit 1
+        if [ -d $HOME/scripts/slowloris ]; then
+            ok "Detected slowloris files. Continuing..."
+            gitslowloris=true
+        else
+            print -n -- "Use git instead? (y/N): "
+            read -k1 option
+            print
+
+            if [[ "$option" == [Yy] ]]; then
+                git clone https://github.com/gkbrk/slowloris.git $HOME/scripts
+            fi
+
+            info "Attempting to install slowloris..."
+            pip3 install slowloris
         fi
-
-        info "Attempting to install slowloris..."
-        pip3 install slowloris
     fi
 }
 
