@@ -3,7 +3,9 @@
 ok()    { print -P "%B%F{green}✔ $*%f%b"; }
 warn()  { print -P "%F{yellow}$*%f"; }
 err()   { print -P "%B%F{red}✖ $*%f%b"; }
-info()  { print -P "%B%F{blue}$*%f%b"; }
+info()  { print -P "%F{blue}$*%f"; }
+infobold() { print -P "%B%F{blue}$*%f%b"; }
+inputprompt() { print -Pn "%B$*%b"; }
 dim()   { print -P "%F{black}$*%f"; }
 
 typeset choice subchoice
@@ -15,14 +17,14 @@ titles=("Server Load Test")
 
 displaymenu() {
     clear
-    info "============ sbro7 Network Tools ============"
+    infobold "============ sbro7 Network Tools ============"
     local i
     for i in {1..${#menus[@]}}; do
         print "    ${i}. ${menus[i]}"
     done 
-    info "============================================="
+    infobold "============================================="
     
-    print -n -- "Enter selection: "
+    inputprompt "Enter selection ([q]uit [h]elp): "
     read -k1 choice
 }
 
@@ -32,17 +34,18 @@ displaysubmenu() {
     inner=(${=submenus[$1]})
     # print -l $inner
 
-    info "============ ${titles[$1]} ============"
+    infobold "============ ${titles[$1]} ============"
     for i in {1..${#inner[@]}}; do
         print "    ${i}. ${inner[$i]}"
     done 
-    info "============================================="
+    infobold "============================================="
     
-    print -n -- "Enter selection: "
+    inputprompt "Enter selection ([b]ack [h]elp): "
     read -k1 subchoice
     
     case $subchoice in;
-        b) displaymenu
+        b) displaymenu;;
+        h) subhelp
     esac
 
 }
@@ -56,13 +59,43 @@ submenuinput() { # (default, submenu#)
     read input
     case $input in;
         '')
-            info "Defaulting value to ${1}"
-            submenuinputret=$1
+            if $newedit; then
+                err "Please enter a value to edit"
+                inputprompt $3
+                submenuinput $1 $2 $3
+            else
+                info "Defaulting value to ${1}"
+                submenuinputret=$1
+            fi
             ;;
-        "b") displaysubmenu $2;;
+        "b") editval $1 $2 $3;;
+        "q") loadtest;;
         *)
             submenuinputret=$input
     esac
+}
+
+newedit=false
+editval() {
+    local editi=$3
+
+    if ((i == 0)); then 
+        err "Cannot edit previous value"
+        inputprompt ${defaulttxt[1]}
+        submenuinput $1 $2
+        newedit=false
+        return
+    fi
+
+    local prevval=${param[editi]}
+    infobold "======================================"
+    info "Editing value..."
+    newedit=true
+    inputprompt ${defaulttxt[editi - 1]}
+    submenuinput $1 $2 ${defaulttxt[editi - 1]}
+
+    warn "Overrid value of ${param[editi - 1]} to ${submenuinputret}"
+    infobold "======================================"
 }
 
 loadtest() {
@@ -70,35 +103,70 @@ loadtest() {
     
     case $subchoice in;
         1)
-            local default=(4 10000 "1m")
+            local logicalcpus=$(sysctl -n hw.logicalcpu)
+            local maxfiles=$(sysctl -n kern.maxfilesperproc)
+
+            local default=($(sysctl -n hw.logicalcpu) $((logicalcpus * 1000)) "5m")
             local defaulttxt=(
                 "Enter number of threads to use: " 
                 "Enter number of connections to use: " 
                 "Enter duration: " 
             )
-            local target i
-            local param=()
-
+            local target
+            local i=1
+            param=()
+            
             clear
-            for ((i=1; i<4; i++)); do
-                print -n -- "${defaulttxt[$i]}"
-                submenuinput $default[$i] 1
+            cmdhelp
+
+            while ((i < 4)); do
+                inputprompt "${defaulttxt[$i]}"
+                submenuinput "$default[$i]" 1 i
+
+                if $newedit; then
+                    ((i--))
+                fi
 
                 if ((i == 2)); then
-                    maxfiles=$(sysctl -n kern.maxfilesperproc)
+                    ulimval=$(ulimit -n)
+                    if ((ulimval < maxfiles)); then
+                        ulimit -n $maxfiles
+                    fi
+
                     if ((submenuinputret > maxfiles)); then
                         err "Exceeded maximum files per process"
                         info "Setting number of connections to 90%% of maximum value..."
-                        param+=$((maxfiles * 90 / 100))
+                        if $newedit; then
+                            param[2]=$((maxfiles * 90 / 100))
+                        else
+                            param+=$((maxfiles * 90 / 100))
+                        fi
+                        ok "Set \"connections\" value to $param[2]"
+                    fi
+
+                    if ((param[1] != default[1] && submenuinputret == default[2])); then
+                        clear
+                        cmdhelp
+                        print -Pn "%BEnter number of threads to use: %b${param[1]}\n"
+                        inputprompt "Enter number of connections to use: \n"
+                        info "Custom thread count detected"
+                        info "Resetting value to optimized number given thread count..."
+                        param+=$((param[1]*1000))
+                        ok "Set \"connections\" value to ${param[2]}"
+                        if $newedit; then
+                            infobold "======================================"
+                        fi
                     else
-                        param+="$submenuinputret"
+                        param+=("$submenuinputret")
                     fi
                 else
-                    param+="$submenuinputret"
+                    param+=("$submenuinputret")
                 fi
+                ((i++))
+                newedit=false
             done
 
-            print -n -- "Enter target: https://"
+            print -nP -- "%BEnter target: %bhttps://"
             read target
             if [[ $target == 'b' ]]; then 
                 displaysubmenu 1
@@ -110,11 +178,11 @@ loadtest() {
         2)
             clear
             local sockets target
-            print -n -- "Enter number of sockets: "
+            print -n "Enter number of sockets: "
             read sockets
-            print -n -- "Enter interval: "
+            print -n "Enter interval: "
             read sleep
-            print -n -- "Enter target: https://"
+            print -n "Enter target: https://"
             read target
             print
 
@@ -195,6 +263,46 @@ compat() {
     fi
 }
 
+mainhelp() {
+    clear
+    cat << 'HLP'
+
+    MAIN MENU:
+    
+    Number keys             Open category
+
+    q                       Quit
+
+    h                       Open this menu
+HLP
+    inputprompt "\n\nPress any key: "
+    read -k1
+    displaymenu
+}
+
+subhelp() {
+    clear
+    cat << 'HLP'
+
+    SUB MENU:
+
+    Number keys             Open category
+
+    b                       Return to main menu
+
+    h                       Open this menu
+HLP
+    inputprompt "\n\nPress any key: "
+    read -k1
+    displaymenu
+}
+
+cmdhelp() {
+    info "For every input field, you may press [q] then [enter] to return to the submenu"
+    info "Pressing [b] then [enter] will allow you to change the previous field's value\n"
+}
+
+
 compat
 displaymenu
 while true; do
@@ -204,6 +312,8 @@ while true; do
             info "\nExiting..."
             exit 1
             ;;
+        h)
+            mainhelp;;
         *)
             displaymenu
     esac
