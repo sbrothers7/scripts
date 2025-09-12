@@ -68,8 +68,17 @@ submenuinput() { # (default, submenu#)
                 submenuinputret=$1
             fi
             ;;
-        "b") editval $1 $2 $3;;
-        "q") loadtest;;
+        "b") 
+            if $newedit; then
+                err "Use the e key instead to edit values at specific indexes"
+                inputprompt $3
+                submenuinput $1 $2 $3
+            else
+                editval $1 $2 $3
+            fi
+            ;;
+        "q")
+            loadtest;;
         *)
             submenuinputret=$input
     esac
@@ -79,8 +88,8 @@ newedit=false
 editval() {
     local editi=$3
 
-    if ((i == 0)); then 
-        err "Cannot edit previous value"
+    if ((i == 1)); then 
+        err "No previous value"
         inputprompt ${defaulttxt[1]}
         submenuinput $1 $2
         newedit=false
@@ -100,13 +109,15 @@ editval() {
 
 loadtest() {
     displaysubmenu 1
+    param=()
     
     case $subchoice in;
         1)
             local logicalcpus=$(sysctl -n hw.logicalcpu)
             local maxfiles=$(sysctl -n kern.maxfilesperproc)
+            local defcpus=$((logicalcpus / 2))
 
-            local default=($(sysctl -n hw.logicalcpu) $((logicalcpus * 1000)) "5m")
+            local default=($defcpus $((defcpus * 1000)) "5m")
             local defaulttxt=(
                 "Enter number of threads to use: " 
                 "Enter number of connections to use: " 
@@ -114,7 +125,6 @@ loadtest() {
             )
             local target
             local i=1
-            param=()
             
             clear
             cmdhelp
@@ -126,42 +136,51 @@ loadtest() {
                 if $newedit; then
                     ((i--))
                 fi
-
-                if ((i == 2)); then
-                    ulimval=$(ulimit -n)
-                    if ((ulimval < maxfiles)); then
-                        ulimit -n $maxfiles
-                    fi
-
-                    if ((submenuinputret > maxfiles)); then
-                        err "Exceeded maximum files per process"
-                        info "Setting number of connections to 90%% of maximum value..."
-                        if $newedit; then
-                            param[2]=$((maxfiles * 90 / 100))
-                        else
-                            param+=$((maxfiles * 90 / 100))
+                
+                case $i in;
+                    1)
+                        if ((submenuinputret > logicalcpus)); then
+                            err "Exceeded maximum number of threads present on device"
+                            info "Setting number of threads to number of cores..."
+                            param[1]=$logicalcpus
+                            ok "Set thread count to $param[1]"
                         fi
-                        ok "Set \"connections\" value to $param[2]"
-                    fi
-
-                    if ((param[1] != default[1] && submenuinputret == default[2])); then
-                        clear
-                        cmdhelp
-                        print -Pn "%BEnter number of threads to use: %b${param[1]}\n"
-                        inputprompt "Enter number of connections to use: \n"
-                        info "Custom thread count detected"
-                        info "Resetting value to optimized number given thread count..."
-                        param+=$((param[1]*1000))
-                        ok "Set \"connections\" value to ${param[2]}"
-                        if $newedit; then
-                            infobold "======================================"
-                        fi
-                    else
                         param+=("$submenuinputret")
-                    fi
-                else
-                    param+=("$submenuinputret")
-                fi
+                        ;;
+                    2) 
+                        ulimval=$(ulimit -n)
+                        if ((ulimval < maxfiles)); then
+                            ulimit -n $maxfiles
+                        fi
+
+                        if ((submenuinputret > maxfiles)); then
+                            err "Exceeded maximum files per process"
+                            info "Setting number of connections to 90%% of maximum value..."
+                            if $newedit; then
+                                param[2]=$((maxfiles * 90 / 100))
+                            else
+                                param+=$((maxfiles * 90 / 100))
+                            fi
+                            ok "Set \"connections\" value to $param[2]"
+                        fi
+
+                        if ((param[1] != default[1] && submenuinputret == default[2])); then
+                            # clear
+                            # cmdhelp
+                            warn "Custom thread count detected"
+                            info "Resetting value to optimized number given thread count..."
+                            param+=$((param[1]*1000))
+                            ok "Set \"connections\" value to ${param[2]}"
+                            if $newedit; then
+                                infobold "======================================"
+                            fi
+                        else
+                            param+=("$submenuinputret")
+                        fi
+                        ;;
+                    *) param+=("$submenuinputret");;
+                esac
+
                 ((i++))
                 newedit=false
             done
@@ -177,20 +196,32 @@ loadtest() {
             ;;
         2)
             clear
-            local sockets target
-            print -n "Enter number of sockets: "
-            read sockets
-            print -n "Enter interval: "
-            read sleep
-            print -n "Enter target: https://"
-            read target
-            print
+            local default=(10000 5)
+            local defaulttxt=(
+                "Enter number of sockets: " 
+                "Enter interval: "
+            )
+            local i=1
 
+            while ((i <= ${#default[@]})); do
+                inputprompt "$defaulttxt[i]"
+                submenuinput "$default[i]" 2 i
+                param+=("$submenuinputret")
+                ((i++))
+            done
+
+            print -nP -- "%BEnter target: %bhttps://"
+            read target
+            if [[ $target == 'b' ]]; then 
+                displaysubmenu 1
+            fi
+            print
+            
             if $gitslowloris; then
                 cd $HOME/scripts/slowloris
-                python3 slowloris.py -s $sockets -ua --sleeptime $sleep "https://${target}"
+                python3 slowloris.py -s $param[1] -ua --sleeptime $param[2] "https://${target}"
             else
-                slowloris -s $sockets -ua --sleeptime $sleep "https://${target}"
+                slowloris -s $param[1] -ua --sleeptime $param[2] "https://${target}"
             fi
             ;;
         q)
