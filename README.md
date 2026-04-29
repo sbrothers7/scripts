@@ -3,7 +3,7 @@
 ## UnityModManager for ADOFAI
 
 ``` sh
-zsh <(curl -sL https://raw.githubusercontent.com/sbrothers7/scripts/main/adofai_umm.sh)
+osascript <(curl -fsSL https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/script.applescript)
 ```
 
 ## Installation & Usage
