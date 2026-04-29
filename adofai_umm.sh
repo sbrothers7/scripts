@@ -74,3 +74,7 @@ send "\r"
 expect eof
 puts "Done!"
 EOF
+
+echo "Setting game to open with Rosetta..."
+xattr -w com.apple.arch x86_64 "/Users/$USER/Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/ADanceOfFireAndIce.app"
+echo "Done! UMM installed and Rosetta enabled."
