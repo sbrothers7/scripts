@@ -16,30 +16,25 @@ if ! command -v expect &>/dev/null; then
     brew install expect
 fi
 
-expect << 'EOF'
-set game_path "/Users/$env(USER)/Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/"
-set download_url "https://files.nexus-cdn.com/2295/21/UnityModManager-21-0-32-4a-1757352298.zip?md5=JSiBkgX6ZbcapO8jFt-h5Q&expires=1777478461&user_id=217166278"
-set zip_file "$env(HOME)/Downloads/UnityModManager.zip"
-set extract_dir "$env(HOME)/Downloads/UnityModManagerInstaller"
+echo "Downloading UnityModManager..."
+curl -L -s -o "$HOME/Downloads/UnityModManager.zip" "https://github.com/sbrothers7/scripts/raw/main/UnityModManager.zip"
+echo "Download complete."
 
-puts "Downloading UnityModManager..."
-exec curl -L -s -o $zip_file $download_url
-puts "Download complete."
+echo "Extracting..."
+rm -rf "$HOME/Downloads/UnityModManagerInstaller"
+unzip -o -q "$HOME/Downloads/UnityModManager.zip" -d "$HOME/Downloads/UnityModManagerInstaller"
 
-puts "Extracting..."
-exec rm -rf $extract_dir
-exec unzip -o $zip_file -d $extract_dir
+CONSOLE_EXE=$(find "$HOME/Downloads/UnityModManagerInstaller" -name "Console.exe" -maxdepth 3 | head -1)
+CONSOLE_DIR=$(dirname "$CONSOLE_EXE")
+echo "Found Console.exe at: $CONSOLE_EXE"
 
-set console_exe [string trim [exec find $extract_dir -name "Console.exe" -maxdepth 3]]
-set console_dir [file dirname $console_exe]
-puts "Found Console.exe at: $console_exe"
+rm -f "$CONSOLE_DIR/UnityModManagerConfigLocal.xml"
 
-exec rm -f "$console_dir/UnityModManagerConfigLocal.xml"
-
+expect << EOF
 set env(TERM) dumb
 
 puts "Launching installer..."
-spawn mono $console_exe
+spawn mono $CONSOLE_EXE
 
 expect -re "change sel"
 send "y\r"
@@ -55,7 +50,7 @@ expect {
 
 expect {
     -re "Enter the full path" {
-        send "$game_path\r"
+        send "$HOME/Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/\r"
         expect -re "Key:"
     }
     -re "Key:" {}
@@ -72,9 +67,8 @@ expect -re "Key:"
 send "\r"
 
 expect eof
-puts "Done!"
 EOF
 
-echo "Setting game to open with Rosetta..."
+echo "\nSetting game to open with Rosetta..."
 xattr -w com.apple.arch x86_64 "/Users/$USER/Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/ADanceOfFireAndIce.app"
 echo "Done! UMM installed and Rosetta enabled."
