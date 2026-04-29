@@ -1,73 +1,85 @@
 #!/bin/bash
-export PATH=$PATH:/usr/local/bin:/opt/homebrew/bin  # Add directories where Homebrew installs binaries
+export PATH=$PATH:/usr/local/bin:/opt/homebrew/bin  # Homebrew paths
 
-# Where to start browsing from by default
-DEFAULT_DIR="$HOME/Desktop"
-
-# Supported video extensions
+DEFAULT_DIR="$HOME/OBS"
 EXTENSIONS='\.(mp4|mkv|webm|avi|mov)$'
 
-# Function to generate a temporary thumbnail using ffmpegthumbnailer
 generate_thumbnail() {
-  local video_file="$1"
-  local thumbnail=$(mktemp).png
-  ffmpegthumbnailer -i "$video_file" -o "$thumbnail" -s 0
-  echo "$thumbnail"
+    local video_file="$1"
+    local thumbnail
+    thumbnail=$(mktemp -t fzfthumb-XXXXXX).png
+    ffmpegthumbnailer -i "$video_file" -o "$thumbnail" -s 256 -f >/dev/null 2>&1
+    echo "$thumbnail"
 }
 
-# Function: interactive picker using tree + fzf
 pick_video() {
-  local start_dir="${1:-$DEFAULT_DIR}"
-  local video
+    local start_dir="${1:-$DEFAULT_DIR}"
+    local video
 
-  video=$(
-    find "$start_dir" -type f \
-      | grep -Ei "$EXTENSIONS" \
-      | fzf \
-        --preview-window=up:30%:wrap \
-        --preview '
-          # 1) make a tmp name (macOS mktemp -t prefix)
-          tmp=$(mktemp -t fzfthumb)
-          thumb="${tmp}.png"
+    video=$(
+        find "$start_dir" -type f \
+        | grep -Ei "$EXTENSIONS" \
+        | fzf \
+            --preview-window=right:70%:wrap \
+            --preview '
+                tmp=$(mktemp -t vidthumb-XXXXXX).png
 
-          # 2) drop the zero-byte file so we can write thumb.png
-          rm -f "$tmp"
+                # Generate thumbnail
+                if ffmpegthumbnailer -i {} -o "$tmp" -s 0 -f >/dev/null 2>&1; then
+                    # Terminal size (in character cells)
+                    cols=$(tput cols)
+                    rows=$(tput lines)
 
-          # 3) generate your thumbnail
-          ffmpegthumbnailer -i {} -s 256 -o "$thumb" -f 2>/dev/null
+                    # Preview is right:70% of the screen
+                    preview_cols=$(( cols * 70 / 100 ))
+                    preview_x=$(( cols - preview_cols + 1 ))   # 1-based column of preview start
 
-          # 4) only if it actually exists, pass it to kitty
-          if [[ -f "$thumb" ]]; then
-            kitty +kitten icat \
-              --transfer-mode file \
-              --silent \
-              --clear \
-              "$thumb"
-          fi
+                    # Choose image size in cells
+                    img_w=90
+                    img_h=30
 
-          # 5) finally, clean up
-          rm -f "$thumb"
-        ' \
-        --prompt="🎥 Pick a video: "
-  )
+                    # Center image within preview area
+                    offset_x=$(( preview_x + (preview_cols - img_w) / 2 ))
+                    offset_y=$(( (rows - img_h) / 2 ))
 
-  echo "$video"
+                    # Clamp offsets to be safe
+                    if [ "$offset_x" -lt 1 ]; then
+                        offset_x=1
+                    fi
+                    if [ "$offset_y" -lt 1 ]; then
+                        offset_y=1
+                    fi
+
+                    kitty +kitten icat \
+                        --transfer-mode=file \
+                        --stdin=no \
+                        --silent \
+                        --clear \
+                        --place "${img_w}x${img_h}@${offset_x}x${offset_y}" \
+                        "$tmp" < /dev/null > /dev/tty 2>/dev/null
+                else
+                    echo "Thumbnail not available"
+                    echo "{}"
+                fi
+
+                rm -f "$tmp"
+            ' \
+            --prompt="Pick a video: "
+    )
+
+    echo "$video"
 }
 
-# Main logic
 if [ $# -eq 0 ]; then
-  VIDEO=$(pick_video "$DEFAULT_DIR")
+    VIDEO=$(pick_video "$DEFAULT_DIR")
 else
-  VIDEO="$1"
+    VIDEO="$1"
 fi
 
-# Exit if nothing selected
 if [ -z "$VIDEO" ]; then
-  echo "❌ No video selected. Exiting."
-  exit 1
+    echo "No video selected. Exiting..."
+    exit 1
 fi
 
-# Confirm and play using Kitty's ASCII renderer
-echo "▶️  Playing: $VIDEO"
+echo "Playing: $VIDEO"
 mpv --vo=tct "$VIDEO"
-
