@@ -3,7 +3,7 @@
 ## UnityModManager for ADOFAI
 
 ``` sh
-osascript <(curl -fsSL https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/script.applescript)
+curl -fsSL https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/script.applescript | osascript
 ```
 
 ## Installation & Usage
