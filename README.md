@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/
 - 얼불춤을 Rosetta 2로 실행하게 설정
 
 > [!Note]
-> 설치 이후 애플의 M시리즈 칩을 탑재한 기기라면 x86_64 실행 파일로만 게임을 열게 설정해야 할 수 있습니다. 스팀에서 실행 옵션을 바꾸거나 `lipo`로 arm64 바이너리를 없애는 방법이 있습니다. [이 페이지](https://sbrothers7.github.io/docs/macOS/ADOFAI%20Modding/x86_64/)를 참조하세요.
+> 애플의 M시리즈 칩을 탑재한 기기라면 설치 이후 x86_64 실행 파일로만 게임을 열게 설정해야 할 수도 있습니다. 스팀에서 실행 옵션을 바꾸거나 `lipo`로 arm64 바이너리를 없애는 방법이 있습니다. [이 페이지](https://sbrothers7.github.io/docs/macOS/ADOFAI%20Modding/x86_64/)를 참조하세요.
 
 ## 기타
 
