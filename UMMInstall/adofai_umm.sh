@@ -16,8 +16,13 @@ if ! command -v expect &>/dev/null; then
     brew install expect
 fi
 
+if ! command -v wget &>/dev/null; then
+    echo "Installing wget..."
+    brew install wget
+fi
+
 echo "Downloading UnityModManager..."
-curl -L -s -o "$HOME/Downloads/UnityModManager.zip" "https://github.com/sbrothers7/scripts/raw/main/UnityModManager.zip"
+wget -O "$HOME/Downloads/UnityModMangerInstaller.zip" "https://adof.ai/umm"
 echo "Download complete."
 
 echo "Extracting..."

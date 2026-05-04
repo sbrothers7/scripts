@@ -1,6 +1,3 @@
--- ADOFAI Mod Manager Installer
--- JXA + WebView for checkbox UI
-
 -- ============================================================
 -- Mod registry
 -- ============================================================
@@ -23,165 +20,38 @@ repeat with m in modRegistry
 end repeat
 
 -- ============================================================
--- Write HTML and JXA via a shell script (avoids quoting hell)
+-- Build comma-separated mod name list¬
 -- ============================================================
-set htmlPath to "/tmp/adofai_installer.html"
-set jxaPath to "/tmp/adofai_installer.jxa"
-set resultPath to "/tmp/adofai_installer_result.txt"
-set writerPath to "/tmp/adofai_write_files.sh"
-
--- Build the mod list as JS array items for the shell script
-set modItemsStr to ""
+set modNamesCSV to ""
 repeat with i from 1 to count of modNames
-	set modItemsStr to modItemsStr & "'" & item i of modNames & "'"
-	if i < (count of modNames) then set modItemsStr to modItemsStr & ","
+	set modNamesCSV to modNamesCSV & item i of modNames
+	if i < (count of modNames) then set modNamesCSV to modNamesCSV & ","
 end repeat
 
--- Write the shell script that creates both files
-set shellScript to "#!/bin/bash
-cat > " & htmlPath & " << 'HTMLEOF'
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset=\"utf-8\">
-<title>ADOFAI Mod Manager</title>
-<link href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css\" rel=\"stylesheet\">
-<style>
-body { background: #212529; color: #dee2e6; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; -webkit-user-select: none; }
-h5 { color: #f8f9fa; }
-.form-check { padding: 8px 12px 8px 40px; border-radius: 6px; margin-bottom: 4px; }
-.form-check:hover { background: #2c3034; }
-.form-check-input:checked { background-color: #0d6efd; border-color: #0d6efd; }
-.form-check-label { cursor: pointer; font-size: 14px; }
-.form-check-input { cursor: pointer; }
-.btn-row { margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end; }
-.select-all-link { font-size: 13px; cursor: pointer; }
-</style>
-</head>
-<body>
-<h5 class=\"mb-1\">ADOFAI Mod Manager</h5>
-<p class=\"text-secondary small mb-3\">Select mods to install with Unity Mod Manager</p>
-<div class=\"d-flex justify-content-end mb-2\">
-  <a class=\"select-all-link text-primary\" id=\"toggleAll\" onclick=\"toggleAll()\">Select All</a>
-</div>
-<div id=\"modList\"></div>
-<div class=\"btn-row\">
-  <button class=\"btn btn-outline-secondary btn-sm\" onclick=\"send('CANCEL')\">Cancel</button>
-  <button class=\"btn btn-outline-secondary btn-sm\" onclick=\"send('SKIP')\">Skip Mods</button>
-  <button class=\"btn btn-primary btn-sm\" onclick=\"doInstall()\">Install</button>
-</div>
-<script>
-var MODS = [" & modItemsStr & "];
-var sel = {};
-var listEl = document.getElementById('modList');
-MODS.forEach(function(name) {
-  var div = document.createElement('div');
-  div.className = 'form-check';
-  var id = 'mod_' + name;
-  div.innerHTML = '<input class=\"form-check-input\" type=\"checkbox\" id=\"' + id + '\" onchange=\"toggle(\\'' + name + '\\')\">' +
-    '<label class=\"form-check-label\" for=\"' + id + '\">' + name + '</label>';
-  listEl.appendChild(div);
-});
-function toggle(name) {
-  if (sel[name]) delete sel[name]; else sel[name] = true;
-  updateBtn();
-}
-function updateBtn() {
-  var count = Object.keys(sel).length;
-  document.getElementById('toggleAll').textContent = count === MODS.length ? 'Deselect All' : 'Select All';
-}
-function toggleAll() {
-  var all = Object.keys(sel).length === MODS.length;
-  MODS.forEach(function(name) {
-    var cb = document.getElementById('mod_' + name);
-    if (all) { delete sel[name]; cb.checked = false; }
-    else { sel[name] = true; cb.checked = true; }
-  });
-  updateBtn();
-}
-function send(msg) { document.title = 'RESULT:' + msg; }
-function doInstall() {
-  var chosen = Object.keys(sel);
-  if (chosen.length === 0) { send('SKIP'); return; }
-  send('INSTALL:' + chosen.join(','));
-}
-</script>
-</body>
-</html>
-HTMLEOF
+-- ============================================================
+-- Download HTML template and JXA from GitHub, inject mod list
+-- ============================================================
+set htmlPath to "/tmp/gui.html"
+set jxaPath to "/tmp/gui.jxa"
+set resultPath to "/tmp/installer_result.txt"
+set baseURL to "https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/"
+set curlUA to "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-cat > " & jxaPath & " << 'JXAEOF'
-ObjC.import('Cocoa');
-ObjC.import('WebKit');
+try
+	do shell script "curl -sfL -A " & quoted form of curlUA & " " & quoted form of (baseURL & "gui.html") & " -o " & quoted form of htmlPath
+	do shell script "curl -sfL -A " & quoted form of curlUA & " " & quoted form of (baseURL & "gui.jxa") & " -o " & quoted form of jxaPath
+on error errMsg
+	display dialog "❌ Failed to download UI files." & return & return & errMsg buttons {"OK"} with icon stop with title "ADOFAI Mod Manager Installer"
+	return
+end try
 
-var app = $.NSApplication.sharedApplication;
-app.setActivationPolicy($.NSApplicationActivationPolicyRegular);
-
-var screen = $.NSScreen.mainScreen.frame;
-var w = 420, h = 520;
-var x = (screen.size.width - w) / 2;
-var y = (screen.size.height - h) / 2;
-
-var win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
-  $.NSMakeRect(x, y, w, h),
-  $.NSTitledWindowMask | $.NSClosableWindowMask,
-  $.NSBackingStoreBuffered, false
-);
-win.title = $('ADOFAI Mod Manager');
-win.level = $.NSFloatingWindowLevel;
-win.titlebarAppearsTransparent = true;
-win.backgroundColor = $.NSColor.colorWithRedGreenBlueAlpha(0.129, 0.145, 0.161, 1.0);
-win.releasedWhenClosed = false;
-
-var config = $.WKWebViewConfiguration.alloc.init;
-var wv = $.WKWebView.alloc.initWithFrameConfiguration(win.contentView.bounds, config);
-wv.autoresizingMask = $.NSViewWidthSizable | $.NSViewHeightSizable;
-wv.setValueForKey(false, 'drawsBackground');
-win.contentView.addSubview(wv);
-
-var url = $.NSURL.fileURLWithPath('/tmp/adofai_installer.html');
-wv.loadFileURLAllowingReadAccessToURL(url, url.URLByDeletingLastPathComponent);
-
-win.makeKeyAndOrderFront(null);
-app.activateIgnoringOtherApps(true);
-
-var done = false;
-var resultFile = '/tmp/adofai_installer_result.txt';
-
-function writeResult(str) {
-  var nsStr = $.NSString.alloc.initWithUTF8String(str);
-  nsStr.writeToFileAtomicallyEncodingError(resultFile, true, $.NSUTF8StringEncoding, null);
-}
-
-var timer = $.NSTimer.scheduledTimerWithTimeIntervalRepeatsBlock(0.2, true, function(t) {
-  wv.evaluateJavaScriptCompletionHandler('document.title', function(res, err) {
-    if (res && res.js && res.js.indexOf('RESULT:') === 0) {
-      var val = res.js.substring(7);
-      writeResult(val);
-      done = true;
-      app.terminate(null);
-    }
-  });
-});
-
-var nc = $.NSNotificationCenter.defaultCenter;
-nc.addObserverForNameObjectQueueUsingBlock(
-  $.NSWindowWillCloseNotification, win, null,
-  function(n) {
-    if (!done) {
-      writeResult('CANCEL');
-    }
-    app.terminate(null);
-  }
-);
-
-app.run();
-JXAEOF
-"
-
-do shell script "echo " & quoted form of shellScript & " > " & quoted form of writerPath & " && chmod +x " & quoted form of writerPath
-do shell script quoted form of writerPath
-do shell script "rm -f " & quoted form of writerPath
+-- Inject the mod list into the HTML template (replace %%MOD_LIST%% placeholder)
+do shell script "MODS=" & quoted form of modNamesCSV & " /usr/bin/python3 -c \"" & ¬
+	"import os, pathlib; " & ¬
+	"mods = os.environ['MODS'].split(','); " & ¬
+	"js = ','.join([repr(m) for m in mods]); " & ¬
+	"p = pathlib.Path('/tmp/gui.html'); " & ¬
+	"p.write_text(p.read_text().replace('%%MOD_LIST%%', js))\""
 
 -- Remove any previous result
 do shell script "rm -f " & quoted form of resultPath
@@ -226,7 +96,7 @@ set scriptPath to (POSIX path of (path to home folder)) & ".adofai_umm.sh"
 display dialog "Downloading installer..." buttons {} giving up after 1 with title "ADOFAI Mod Manager Installer"
 
 try
-	do shell script "curl -sfL -A 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/adofai_umm.sh -o " & quoted form of scriptPath
+	do shell script "curl -sfL -A " & quoted form of curlUA & " " & quoted form of (baseURL & "adofai_umm.sh") & " -o " & quoted form of scriptPath
 on error errMsg
 	display dialog "❌ Failed to download installer script." & return & return & errMsg buttons {"OK"} with icon stop with title "ADOFAI Mod Manager Installer"
 	return
@@ -251,28 +121,6 @@ end try
 set modsPath to (POSIX path of (path to home folder)) & "Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/Mods"
 do shell script "mkdir -p " & quoted form of modsPath
 
--- Check if wget is needed and install if missing
-set needsWget to false
-repeat with m in modRegistry
-	if modURL of m contains "fixcdn.hyonsu.com" then
-		set needsWget to true
-		exit repeat
-	end if
-end repeat
-
-if needsWget then
-	try
-		do shell script "command -v wget"
-	on error
-		display dialog "Installing wget (required for some mod downloads)..." buttons {} giving up after 2 with title "ADOFAI Mod Manager Installer"
-		try
-			do shell script "brew install wget"
-		on error
-			display dialog "⚠️ wget installation failed. Some mods may not download correctly." & return & return & "You can install wget manually with: brew install wget" buttons {"Continue"} default button "Continue" with icon caution with title "ADOFAI Mod Manager Installer"
-		end try
-	end try
-end if
-
 if (count of selectedMods) > 0 then
 	set installedMods to {}
 	set failedMods to {}
@@ -294,7 +142,7 @@ if (count of selectedMods) > 0 then
 			if modURL starts with "GITHUB_API:" then
 				set repoSlug to text 12 thru -1 of modURL
 				try
-					set modURL to do shell script "curl -sfL -A 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 'https://api.github.com/repos/" & repoSlug & "/releases/latest' | /usr/bin/python3 -c \"import sys,json; assets=json.load(sys.stdin).get('assets',[]); zips=[a['browser_download_url'] for a in assets if a['name'].endswith('.zip')]; print(zips[0]) if zips else sys.exit(1)\""
+					set modURL to do shell script "curl -sfL -A " & quoted form of curlUA & " 'https://api.github.com/repos/" & repoSlug & "/releases/latest' | /usr/bin/python3 -c \"import sys,json; assets=json.load(sys.stdin).get('assets',[]); zips=[a['browser_download_url'] for a in assets if a['name'].endswith('.zip')]; print(zips[0]) if zips else sys.exit(1)\""
 				on error
 					set modURL to ""
 				end try
