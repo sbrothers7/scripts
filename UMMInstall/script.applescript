@@ -14,6 +14,9 @@ set modRegistry to {¬
 	{modID:"XPerfect", modURL:"https://github.com/8100print/XPerfect/releases/latest/download/XPerfect.zip"} ¬
 }
 
+-- Donwload icon
+do shell script "curl -fsL -o /tmp/icon.png 'https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/icon.png'"
+
 set modNames to {}
 repeat with m in modRegistry
 	set end of modNames to modID of m
@@ -87,7 +90,7 @@ end if
 -- ============================================================
 -- Install UMM
 -- ============================================================
-set response to display dialog "This will install Unity Mod Manager for A Dance of Fire and Ice." & return & return & "Make sure the game is installed via Steam before continuing." buttons {"Cancel", "Install"} default button "Install" with icon note with title "ADOFAI Mod Manager Installer"
+set response to display dialog "This will install Unity Mod Manager for A Dance of Fire and Ice." & return & return & "Make sure the game is installed via Steam before continuing." buttons {"Cancel", "Install"} default button "Install" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
 
 if button returned of response is "Cancel" then return
 
@@ -201,8 +204,8 @@ if (count of selectedMods) > 0 then
 	end if
 	
 	display notification "Installation complete!" with title "ADOFAI Mod Manager"
-	display dialog "Installation complete!" & return & return & "Unity Mod Manager has been installed." & return & return & summaryText buttons {"OK"} default button "OK" with icon note with title "ADOFAI Mod Manager Installer"
+	display dialog "✅ Installation complete!" & return & return & "Unity Mod Manager has been installed." & return & return & summaryText buttons {"OK"} default button "OK" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
 else
 	display notification "Installation complete!" with title "ADOFAI Mod Manager"
-	display dialog "✅ Unity Mod Manager has been installed." & return & return & "No mods were selected." buttons {"OK"} default button "OK" with icon note with title "ADOFAI Mod Manager Installer"
+	display dialog "✅ Unity Mod Manager has been installed." & return & return & "No mods were selected." buttons {"OK"} default button "OK" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
 end if

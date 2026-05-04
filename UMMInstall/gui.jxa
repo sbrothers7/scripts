@@ -5,7 +5,7 @@ var app = $.NSApplication.sharedApplication;
 app.setActivationPolicy($.NSApplicationActivationPolicyRegular);
 
 var screen = $.NSScreen.mainScreen.frame;
-var w = 420, h = 520;
+var w = 480, h = 620;
 var x = (screen.size.width - w) / 2;
 var y = (screen.size.height - h) / 2;
 
