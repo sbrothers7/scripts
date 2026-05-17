@@ -15,6 +15,9 @@ set modRegistry to {¬
 	{modID:"DesyncFix", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1045847555440910406/DesyncFix-0.0.6.zip"} ¬
 }
 
+-- Kill any leftover JXA UI from a previous crashed run
+do shell script "pkill -f 'osascript -l JavaScript /tmp/gui.jxa' 2>/dev/null; true"
+
 -- Donwload icon
 do shell script "curl -fsL -o /tmp/icon.png 'https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/icon.png'"
 
@@ -23,7 +26,10 @@ do shell script "curl -fsL -o /tmp/icon.png 'https://raw.githubusercontent.com/s
 -- ============================================================
 set confirmText to "This script will install:" & return & "  - Homebrew (if not installed)" & return & "  - wget (if not installed)" & return & "  - expect (if not installed)" & return & return & "If you are on Apple Silicon, this script will automatically remove the arm64 slice of the game binary." & return & return & "Do you still wish to proceed?"
 
-set confirmResponse to display dialog confirmText buttons {"Cancel", "Proceed"} default button "Proceed" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
+tell application "System Events"
+	activate
+	set confirmResponse to display dialog confirmText buttons {"Cancel", "Proceed"} default button "Proceed" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
+end tell
 if button returned of confirmResponse is "Cancel" then return
 
 set modNames to {}
