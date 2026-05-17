@@ -11,11 +11,20 @@ set modRegistry to {¬
 	{modID:"YouTubeStream", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1343622558813130855/YouTubeStream-1.0.3.zip"}, ¬
 	{modID:"KeyboardChatterBlocker", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1239183582975627304/KeyboardChatterBlocker_v0.0.9.zip"}, ¬
 	{modID:"EnhancedEffectRemover", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1279566899109433385/EnhancedEffectRemover_1.6.1.zip"}, ¬
-	{modID:"XPerfect", modURL:"https://github.com/8100print/XPerfect/releases/latest/download/XPerfect.zip"} ¬
+	{modID:"XPerfect", modURL:"https://github.com/8100print/XPerfect/releases/latest/download/XPerfect.zip"}, ¬
+	{modID:"DesyncFix", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1045847555440910406/DesyncFix-0.0.6.zip"} ¬
 }
 
 -- Donwload icon
 do shell script "curl -fsL -o /tmp/icon.png 'https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/icon.png'"
+
+-- ============================================================
+-- Upfront confirmation
+-- ============================================================
+set confirmText to "This script will install:" & return & "  - Homebrew (if not installed)" & return & "  - wget (if not installed)" & return & "  - expect (if not installed)" & return & return & "If you are on Apple Silicon, this script will automatically remove the arm64 slice of the game binary." & return & return & "Do you still wish to proceed?"
+
+set confirmResponse to display dialog confirmText buttons {"Cancel", "Proceed"} default button "Proceed" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
+if button returned of confirmResponse is "Cancel" then return
 
 set modNames to {}
 repeat with m in modRegistry
@@ -23,7 +32,7 @@ repeat with m in modRegistry
 end repeat
 
 -- ============================================================
--- Build comma-separated mod name list¬
+-- Build comma-separated mod name list
 -- ============================================================
 set modNamesCSV to ""
 repeat with i from 1 to count of modNames
@@ -117,6 +126,33 @@ end try
 try
 	do shell script "rm -f " & quoted form of scriptPath
 end try
+
+-- ============================================================
+-- Apple Silicon: force x86_64 by stripping arm64 slice
+-- ============================================================
+set gameBinary to (POSIX path of (path to home folder)) & "Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/ADanceOfFireAndIce.app/Contents/MacOS/ADanceOfFireAndIce"
+
+try
+	set cpuArch to do shell script "uname -m"
+on error
+	set cpuArch to ""
+end try
+
+if cpuArch is "arm64" then
+	try
+		set archInfo to do shell script "lipo -info " & quoted form of gameBinary & " 2>/dev/null"
+	on error
+		set archInfo to ""
+	end try
+
+	if archInfo contains "arm64" then
+		try
+			do shell script "lipo -remove arm64 " & quoted form of gameBinary & " -output " & quoted form of gameBinary
+		on error errMsg
+			display dialog "❌ Failed to remove arm64 slice." & return & return & errMsg buttons {"OK"} with icon stop with title "ADOFAI Mod Manager Installer"
+		end try
+	end if
+end if
 
 -- ============================================================
 -- Download mods
