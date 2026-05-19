@@ -22,7 +22,7 @@ if ! command -v wget &>/dev/null; then
 fi
 
 echo "Downloading UnityModManager..."
-wget -O "$HOME/Downloads/UnityModMangerInstaller.zip" "https://adof.ai/umm"
+wget -O "$HOME/Downloads/UnityModManager.zip" "https://adof.ai/umm"
 echo "Download complete."
 
 echo "Extracting..."
@@ -74,6 +74,4 @@ send "\r"
 expect eof
 EOF
 
-echo "\nSetting game to open with Rosetta..."
-xattr -w com.apple.arch x86_64 "/Users/$USER/Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/ADanceOfFireAndIce.app"
-echo "Done! UMM installed and Rosetta enabled."
+echo "Done! UMM installed."

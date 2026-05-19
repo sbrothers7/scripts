@@ -123,7 +123,7 @@ end try
 display dialog "Installing Unity Mod Manager... This may take a few minutes." buttons {} giving up after 1 with title "ADOFAI Mod Manager Installer"
 
 try
-	do shell script "zsh " & quoted form of scriptPath with administrator privileges
+	do shell script "zsh " & quoted form of scriptPath
 on error errMsg
 	display dialog "❌ UMM installation failed." & return & return & errMsg buttons {"OK"} with icon stop with title "ADOFAI Mod Manager Installer"
 	return
