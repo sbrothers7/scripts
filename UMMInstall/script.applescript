@@ -10,15 +10,29 @@ set modRegistry to {¬
 	{modID:"TogetherBootstrap", modURL:"https://github.com/fangshenghan/TogetherBootstrap-Mod/releases/latest/download/TogetherBootstrap.v1.5.5.zip"}, ¬
 	{modID:"YouTubeStream", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1343622558813130855/YouTubeStream-1.0.3.zip"}, ¬
 	{modID:"KeyboardChatterBlocker", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1239183582975627304/KeyboardChatterBlocker_v0.0.9.zip"}, ¬
-	{modID:"EnhancedEffectRemover", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1279566899109433385/EnhancedEffectRemover_1.6.1.zip"}, ¬
+	{modID:"EnhancedEffectRemover", modURL:"https://github.com/WsbiMango/EnhancedEffectRemover/releases/download/1.7.0/EnhancedEffectRemover_1.7.0.zip"}, ¬
 	{modID:"XPerfect", modURL:"https://github.com/8100print/XPerfect/releases/latest/download/XPerfect.zip"}, ¬
 	{modID:"DesyncFix", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1045847555440910406/DesyncFix-0.0.6.zip"} ¬
 }
 
--- Kill any leftover JXA UI from a previous crashed run
-do shell script "pkill -f 'osascript -l JavaScript /tmp/gui.jxa' 2>/dev/null; true"
+-- ============================================================
+-- Paths
+-- ============================================================
+set htmlPath to "/tmp/gui.html"
+set jxaPath to "/tmp/gui.jxa"
+set selResultPath to "/tmp/installer_result.txt"
+set progressHTMLPath to "/tmp/progress.html"
+set progressJXAPath to "/tmp/progress.jxa"
+set progressLogPath to "/tmp/installer_progress.log"
+set progressResultPath to "/tmp/installer_progress_result.txt"
+set baseURL to "https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/"
+set curlUA to "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
--- Donwload icon
+-- Kill any leftover UI from a previous crashed run
+do shell script "pkill -f 'osascript -l JavaScript /tmp/gui.jxa' 2>/dev/null; pkill -f 'osascript -l JavaScript /tmp/progress.jxa' 2>/dev/null; true"
+do shell script "rm -f " & quoted form of progressLogPath & " " & quoted form of progressResultPath
+
+-- Download icon
 do shell script "curl -fsL -o /tmp/icon.png 'https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/icon.png'"
 
 -- ============================================================
@@ -37,9 +51,6 @@ repeat with m in modRegistry
 	set end of modNames to modID of m
 end repeat
 
--- ============================================================
--- Build comma-separated mod name list
--- ============================================================
 set modNamesCSV to ""
 repeat with i from 1 to count of modNames
 	set modNamesCSV to modNamesCSV & item i of modNames
@@ -47,23 +58,19 @@ repeat with i from 1 to count of modNames
 end repeat
 
 -- ============================================================
--- Download HTML template and JXA from GitHub, inject mod list
+-- Download UI assets
 -- ============================================================
-set htmlPath to "/tmp/gui.html"
-set jxaPath to "/tmp/gui.jxa"
-set resultPath to "/tmp/installer_result.txt"
-set baseURL to "https://raw.githubusercontent.com/sbrothers7/scripts/main/UMMInstall/"
-set curlUA to "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
 try
 	do shell script "curl -sfL -A " & quoted form of curlUA & " " & quoted form of (baseURL & "gui.html") & " -o " & quoted form of htmlPath
 	do shell script "curl -sfL -A " & quoted form of curlUA & " " & quoted form of (baseURL & "gui.jxa") & " -o " & quoted form of jxaPath
+	do shell script "curl -sfL -A " & quoted form of curlUA & " " & quoted form of (baseURL & "progress.html") & " -o " & quoted form of progressHTMLPath
+	do shell script "curl -sfL -A " & quoted form of curlUA & " " & quoted form of (baseURL & "progress.jxa") & " -o " & quoted form of progressJXAPath
 on error errMsg
 	display dialog "❌ Failed to download UI files." & return & return & errMsg buttons {"OK"} with icon stop with title "ADOFAI Mod Manager Installer"
 	return
 end try
 
--- Inject the mod list into the HTML template (replace %%MOD_LIST%% placeholder)
+-- Inject the mod list into the HTML template
 do shell script "MODS=" & quoted form of modNamesCSV & " /usr/bin/python3 -c \"" & ¬
 	"import os, pathlib; " & ¬
 	"mods = os.environ['MODS'].split(','); " & ¬
@@ -71,23 +78,15 @@ do shell script "MODS=" & quoted form of modNamesCSV & " /usr/bin/python3 -c \""
 	"p = pathlib.Path('/tmp/gui.html'); " & ¬
 	"p.write_text(p.read_text().replace('%%MOD_LIST%%', js))\""
 
--- Remove any previous result
-do shell script "rm -f " & quoted form of resultPath
+do shell script "rm -f " & quoted form of selResultPath
 
 -- ============================================================
--- Run the JXA UI
+-- Mod selection UI
 -- ============================================================
 do shell script "osascript -l JavaScript " & quoted form of jxaPath
+set userResult to do shell script "cat " & quoted form of selResultPath & " 2>/dev/null || echo 'CANCEL'"
+do shell script "rm -f " & quoted form of htmlPath & " " & quoted form of jxaPath & " " & quoted form of selResultPath
 
--- Read result
-set userResult to do shell script "cat " & quoted form of resultPath & " 2>/dev/null || echo 'CANCEL'"
-
--- Clean up
-do shell script "rm -f " & quoted form of htmlPath & " " & quoted form of jxaPath & " " & quoted form of resultPath
-
--- ============================================================
--- Handle selection
--- ============================================================
 if userResult is "CANCEL" then return
 
 if userResult is "SKIP" then
@@ -103,62 +102,43 @@ else
 end if
 
 -- ============================================================
--- Install UMM
+-- Launch progress window in the background
 -- ============================================================
-set response to display dialog "This will install Unity Mod Manager for A Dance of Fire and Ice." & return & return & "Make sure the game is installed via Steam before continuing." buttons {"Cancel", "Install"} default button "Install" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
+do shell script ": > " & quoted form of progressLogPath
+do shell script "rm -f " & quoted form of progressResultPath
+do shell script "nohup osascript -l JavaScript " & quoted form of progressJXAPath & " >/dev/null 2>&1 &"
 
-if button returned of response is "Cancel" then return
-
+-- ============================================================
+-- Run installer
+-- ============================================================
 set scriptPath to (POSIX path of (path to home folder)) & ".adofai_umm.sh"
 
-display dialog "Downloading installer..." buttons {} giving up after 1 with title "ADOFAI Mod Manager Installer"
-
+my plog("info", "Downloading installer…")
 try
 	do shell script "curl -sfL -A " & quoted form of curlUA & " " & quoted form of (baseURL & "adofai_umm.sh") & " -o " & quoted form of scriptPath
 on error errMsg
-	display dialog "❌ Failed to download installer script." & return & return & errMsg buttons {"OK"} with icon stop with title "ADOFAI Mod Manager Installer"
+	my plog("error", "Failed to download installer script.")
+	my plogDetail(errMsg)
+	my pfail("Installation failed.")
+	my waitForClose()
 	return
 end try
 
-display dialog "Installing Unity Mod Manager... This may take a few minutes." buttons {} giving up after 1 with title "ADOFAI Mod Manager Installer"
-
+my plog("info", "Installing Unity Mod Manager (this may take a few minutes)…")
 try
-	do shell script "zsh " & quoted form of scriptPath
+	do shell script "script -q /dev/null /bin/zsh " & quoted form of scriptPath & " >> " & quoted form of progressLogPath & " 2>&1"
 on error errMsg
-	display dialog "❌ UMM installation failed." & return & return & errMsg buttons {"OK"} with icon stop with title "ADOFAI Mod Manager Installer"
+	my plog("error", "Unity Mod Manager installation failed.")
+	my plogDetail(errMsg)
+	my pfail("Installation failed.")
+	my waitForClose()
 	return
 end try
+my plog("ok", "Unity Mod Manager installed.")
 
 try
 	do shell script "rm -f " & quoted form of scriptPath
 end try
-
--- ============================================================
--- Apple Silicon: force x86_64 by stripping arm64 slice
--- ============================================================
-set gameBinary to (POSIX path of (path to home folder)) & "Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/ADanceOfFireAndIce.app/Contents/MacOS/ADanceOfFireAndIce"
-
-try
-	set cpuArch to do shell script "uname -m"
-on error
-	set cpuArch to ""
-end try
-
-if cpuArch is "arm64" then
-	try
-		set archInfo to do shell script "lipo -info " & quoted form of gameBinary & " 2>/dev/null"
-	on error
-		set archInfo to ""
-	end try
-
-	if archInfo contains "arm64" then
-		try
-			do shell script "lipo -remove arm64 " & quoted form of gameBinary & " -output " & quoted form of gameBinary
-		on error errMsg
-			display dialog "❌ Failed to remove arm64 slice." & return & return & errMsg buttons {"OK"} with icon stop with title "ADOFAI Mod Manager Installer"
-		end try
-	end if
-end if
 
 -- ============================================================
 -- Download mods
@@ -166,24 +146,24 @@ end if
 set modsPath to (POSIX path of (path to home folder)) & "Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/Mods"
 do shell script "mkdir -p " & quoted form of modsPath
 
+set installedMods to {}
+set failedMods to {}
+
 if (count of selectedMods) > 0 then
-	set installedMods to {}
-	set failedMods to {}
 	set totalMods to count of selectedMods
-	
+
 	repeat with i from 1 to totalMods
 		set modName to item i of selectedMods
 		set modURL to ""
-		
+
 		repeat with m in modRegistry
 			if modID of m is modName then
 				set modURL to modURL of m
 				exit repeat
 			end if
 		end repeat
-		
+
 		if modURL is not "" then
-			-- Resolve GitHub API URLs (for mods with version-dependent asset names)
 			if modURL starts with "GITHUB_API:" then
 				set repoSlug to text 12 thru -1 of modURL
 				try
@@ -192,16 +172,16 @@ if (count of selectedMods) > 0 then
 					set modURL to ""
 				end try
 			end if
-			
+
 			if modURL is "" then
+				my plog("error", "Could not resolve URL for " & modName)
 				set end of failedMods to modName
 			else
-				display dialog "Downloading " & modName & " (" & i & "/" & totalMods & ")..." buttons {} giving up after 1 with title "ADOFAI Mod Manager Installer"
-				
+				my plog("info", "Downloading " & modName & " (" & i & "/" & totalMods & ")…")
+
 				set tmpZip to "/tmp/adofai_mod_" & modName & ".zip"
 				set tmpExtract to "/tmp/adofai_extract_" & modName
 				try
-					-- Use wget for Discord CDN links (fixcdn.hyonsu.com), curl for others
 					if modURL contains "fixcdn.hyonsu.com" then
 						do shell script "wget --user-agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' -O " & quoted form of tmpZip & " " & quoted form of modURL
 					else
@@ -220,34 +200,67 @@ if (count of selectedMods) > 0 then
 						"  mkdir -p " & quoted form of modsPath & "/" & quoted form of modName & " && " & ¬
 						"  mv * " & quoted form of modsPath & "/" & quoted form of modName & "/; " & ¬
 						"fi"
-						
+
 					do shell script "rm -rf " & quoted form of tmpExtract & " " & quoted form of tmpZip
+					my plog("ok", modName & " installed.")
 					set end of installedMods to modName
 				on error errMsg
 					do shell script "rm -rf " & quoted form of tmpExtract & " " & quoted form of tmpZip
+					my plog("error", modName & " failed to install.")
+					my plogDetail(errMsg)
 					set end of failedMods to modName
 				end try
 			end if
 		end if
 	end repeat
-	
-	set summaryText to ""
-	if (count of installedMods) > 0 then
-		set summaryText to "Installed mods:" & return
-		repeat with m in installedMods
-			set summaryText to summaryText & "  - " & (contents of m) & return
-		end repeat
-	end if
-	if (count of failedMods) > 0 then
-		set summaryText to summaryText & return & "Failed mods:" & return
-		repeat with m in failedMods
-			set summaryText to summaryText & "  - " & (contents of m) & return
-		end repeat
-	end if
-	
-	display notification "Installation complete!" with title "ADOFAI Mod Manager"
-	display dialog "✅ Installation complete!" & return & return & "Unity Mod Manager has been installed." & return & return & summaryText buttons {"OK"} default button "OK" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
-else
-	display notification "Installation complete!" with title "ADOFAI Mod Manager"
-	display dialog "✅ Unity Mod Manager has been installed." & return & return & "No mods were selected." buttons {"OK"} default button "OK" with icon file (POSIX file "/tmp/icon.png" as alias) with title "ADOFAI Mod Manager Installer"
 end if
+
+-- ============================================================
+-- Summary
+-- ============================================================
+if (count of failedMods) > 0 then
+	my pcomplete("Installation finished with errors.")
+else
+	my pcomplete("Installation complete.")
+end if
+
+display notification "Installation complete!" with title "ADOFAI Mod Manager"
+my waitForClose()
+
+
+-- ============================================================
+-- Helpers
+-- ============================================================
+on plog(level, message)
+	set logPath to "/tmp/installer_progress.log"
+	do shell script "printf '%s\\n' " & quoted form of (level & ":" & message) & " >> " & quoted form of logPath
+end plog
+
+on plogDetail(detailText)
+	set logPath to "/tmp/installer_progress.log"
+	set AppleScript's text item delimiters to {return, linefeed}
+	set lines to text items of detailText
+	set AppleScript's text item delimiters to ""
+	repeat with ln in lines
+		set s to contents of ln
+		if s is not "" then
+			do shell script "printf '%s\\n' " & quoted form of ("detail:" & s) & " >> " & quoted form of logPath
+		end if
+	end repeat
+end plogDetail
+
+on pcomplete(msg)
+	set logPath to "/tmp/installer_progress.log"
+	do shell script "printf '%s\\n' " & quoted form of ("complete:" & msg) & " >> " & quoted form of logPath
+end pcomplete
+
+on pfail(msg)
+	set logPath to "/tmp/installer_progress.log"
+	do shell script "printf '%s\\n' " & quoted form of ("failed:" & msg) & " >> " & quoted form of logPath
+end pfail
+
+on waitForClose()
+	set resultPath to "/tmp/installer_progress_result.txt"
+	do shell script "while [ ! -f " & quoted form of resultPath & " ]; do sleep 0.3; done"
+	do shell script "rm -f /tmp/progress.html /tmp/progress.jxa " & quoted form of resultPath & " /tmp/installer_progress.log"
+end waitForClose
