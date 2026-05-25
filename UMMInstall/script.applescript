@@ -9,7 +9,7 @@ set modRegistry to {¬
 	{modID:"PACL2", modURL:"https://jalib.jongyeol.kr/downloadMod/PACL2/2.4.205"}, ¬
 	{modID:"TogetherBootstrap", modURL:"https://github.com/fangshenghan/TogetherBootstrap-Mod/releases/latest/download/TogetherBootstrap.v1.5.5.zip"}, ¬
 	{modID:"YouTubeStream", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1343622558813130855/YouTubeStream-1.0.3.zip"}, ¬
-	{modID:"KeyboardChatterBlocker", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1239183582975627304/KeyboardChatterBlocker_v0.0.9.zip"}, ¬
+	{modID:"KeyboardChatterBlocker", modURL:"https://github.com/fangshenghan/KeyboardChatterBlocker/releases/download/0.1.0/KeyboardChatterBlocker.v0.1.0.zip"}, ¬
 	{modID:"EnhancedEffectRemover", modURL:"https://github.com/WsbiMango/EnhancedEffectRemover/releases/download/1.7.0/EnhancedEffectRemover_1.7.0.zip"}, ¬
 	{modID:"XPerfect", modURL:"https://github.com/8100print/XPerfect/releases/latest/download/XPerfect.zip"}, ¬
 	{modID:"DesyncFix", modURL:"https://fixcdn.hyonsu.com/attachments/886661471533162526/1045847555440910406/DesyncFix-0.0.6.zip"} ¬
