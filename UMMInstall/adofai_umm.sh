@@ -71,19 +71,32 @@ GAME_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$
 GAME_MAJOR="${GAME_VERSION%%.*}"
 echo "Detected ADOFAI version: ${GAME_VERSION:-unknown}"
 
-# Strip arm64 slice on Apple Silicon so Steam launches the x86_64 slice under
-# Rosetta (Harmony's mprotect-based JIT patching fails under arm64 W^X).
-TARGET="$EXE"
-[ -f "$REAL" ] && TARGET="$REAL"
-if [ "$(uname -m)" = "arm64" ] && lipo -info "$TARGET" 2>/dev/null | grep -q "arm64"; then
-    echo "Apple Silicon detected — stripping arm64 slice from $TARGET..."
-    lipo -remove arm64 "$TARGET" -output "$TARGET.tmp"
-    mv "$TARGET.tmp" "$TARGET"
-    chmod +x "$TARGET"
+# Reconcile state from any previous run. If a .real exists alongside $EXE:
+#   - If $EXE is tiny (<30KB): launcher from a previous 3.x install → restore .real to $EXE.
+#   - If $EXE is large, Steam restored the original binary via Verify Integrity → delete it.
+if [ -f "$REAL" ]; then
+    EXE_SIZE=$(stat -f%z "$EXE" 2>/dev/null || echo 0)
+    if [ "$EXE_SIZE" -lt 30000 ]; then
+        echo "Restoring real binary from previous launcher install..."
+        rm -f "$EXE"
+        mv "$REAL" "$EXE"
+    else
+        echo "Stale .real from previous install — removing..."
+        rm -f "$REAL"
+    fi
+fi
+
+# Strip arm64 slice on Apple Silicon so Steam launches the x86_64 slice under Rosetta 
+# (Harmony's mprotect-based JIT patching fails under arm64 W^X)
+if [ "$(uname -m)" = "arm64" ] && lipo -info "$EXE" 2>/dev/null | grep -q "arm64"; then
+    echo "Apple Silicon detected — stripping arm64 slice from game binary..."
+    lipo -remove arm64 "$EXE" -output "$EXE.tmp"
+    mv "$EXE.tmp" "$EXE"
+    chmod +x "$EXE"
 fi
 
 if [ "$GAME_MAJOR" = "2" ]; then
-    echo "Game major version is 2.x — skipping mini launcher; Console.exe patch + arm64 strip is sufficient."
+    echo "skipping mini launcher..."
 else
     echo "Installing x86_64-only launcher (passes -force-metal so Rosetta uses Metal, not the unstable OpenGL fallback)..."
     if [ ! -f "$REAL" ]; then
