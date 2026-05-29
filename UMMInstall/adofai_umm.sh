@@ -67,23 +67,30 @@ expect {
 expect eof
 EOF
 
-if [ "$(uname -m)" = "arm64" ] && lipo -info "$REAL" 2>/dev/null | grep -q "arm64" || lipo -info "$EXE" 2>/dev/null | grep -q "arm64"; then
-    TARGET="$EXE"
-    [ -f "$REAL" ] && TARGET="$REAL"
-    echo "Apple Silicon detected — stripping arm64 slice from $TARGET so Steam launches the x86_64 slice under Rosetta (required for Harmony's mprotect JIT patching, which fails under arm64 W^X)..."
-    if lipo -info "$TARGET" 2>/dev/null | grep -q "arm64"; then
-        lipo -remove arm64 "$TARGET" -output "$TARGET.tmp"
-        mv "$TARGET.tmp" "$TARGET"
-        chmod +x "$TARGET"
-    fi
+GAME_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist" 2>/dev/null)
+GAME_MAJOR="${GAME_VERSION%%.*}"
+echo "Detected ADOFAI version: ${GAME_VERSION:-unknown}"
+
+# Strip arm64 slice on Apple Silicon so Steam launches the x86_64 slice under
+# Rosetta (Harmony's mprotect-based JIT patching fails under arm64 W^X).
+TARGET="$EXE"
+[ -f "$REAL" ] && TARGET="$REAL"
+if [ "$(uname -m)" = "arm64" ] && lipo -info "$TARGET" 2>/dev/null | grep -q "arm64"; then
+    echo "Apple Silicon detected — stripping arm64 slice from $TARGET..."
+    lipo -remove arm64 "$TARGET" -output "$TARGET.tmp"
+    mv "$TARGET.tmp" "$TARGET"
+    chmod +x "$TARGET"
 fi
 
-echo "Installing x86_64-only launcher (passes -force-metal so Rosetta uses Metal, not the unstable OpenGL fallback)..."
-if [ ! -f "$REAL" ]; then
-    mv "$EXE" "$REAL"
-fi
-SRC="/tmp/umm_adofai_launcher_$$.c"
-cat > "$SRC" <<'LAUNCHER_C'
+if [ "$GAME_MAJOR" = "2" ]; then
+    echo "Game major version is 2.x — skipping mini launcher; Console.exe patch + arm64 strip is sufficient."
+else
+    echo "Installing x86_64-only launcher (passes -force-metal so Rosetta uses Metal, not the unstable OpenGL fallback)..."
+    if [ ! -f "$REAL" ]; then
+        mv "$EXE" "$REAL"
+    fi
+    SRC="/tmp/umm_adofai_launcher_$$.c"
+    cat > "$SRC" <<'LAUNCHER_C'
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -109,9 +116,10 @@ int main(int argc, char **argv) {
     return 1;
 }
 LAUNCHER_C
-clang -arch x86_64 -O2 -o "$EXE" "$SRC"
-rm -f "$SRC"
-chmod 755 "$EXE"
+    clang -arch x86_64 -O2 -o "$EXE" "$SRC"
+    rm -f "$SRC"
+    chmod 755 "$EXE"
+fi
 
 echo "Re-signing .app bundle ad-hoc (strip stale signatures first so the new seal is honored)..."
 codesign --remove-signature "$APP" 2>/dev/null || true
@@ -121,7 +129,7 @@ find "$APP" -type f \( -name "*.dylib" -o -name "*.bundle" \) -print0 2>/dev/nul
 done
 codesign --remove-signature "$EXE" 2>/dev/null || true
 codesign --remove-signature "$REAL" 2>/dev/null || true
-codesign --force --sign - "$REAL"
+[ -f "$REAL" ] && codesign --force --sign - "$REAL"
 codesign --force --deep --sign - "$APP"
 
 echo "Done! Launch the game via Steam and press Ctrl+F10 for the UMM menu."
