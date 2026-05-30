@@ -76,7 +76,11 @@ function escapeHTML(s) {
 function appendLine(raw) {
   // strip script(1)'s leading ^D + backspace sequences and pty CRs
   raw = raw.replace(/\r/g, '').replace(/\^D\x08+/, '').replace(/^\x08+/, '');
-  if (raw === '') return;
+  // strip ANSI escape sequences (CSI colors, mode sets) from TUI output
+  raw = raw.replace(/\x1b\[[\d;?]*[a-zA-Z]/g, '')
+           .replace(/\x1b[=>cm78]/g, '')
+           .replace(/\x1b[()][AB012]/g, '');
+  if (raw === '' || /^\s*$/.test(raw)) return;
 
   var idx = raw.indexOf(':');
   var prefix = idx > 0 ? raw.substring(0, idx).toLowerCase() : '';
