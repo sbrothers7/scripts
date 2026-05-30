@@ -38,7 +38,22 @@ do shell script "curl -fsL -o /tmp/icon.png 'https://raw.githubusercontent.com/s
 -- ============================================================
 -- Upfront confirmation
 -- ============================================================
-set confirmText to "This script will install:" & return & "  - Homebrew (if not installed)" & return & "  - wget (if not installed)" & return & "  - expect (if not installed)" & return & return & "If you are on Apple Silicon, this script will automatically remove the arm64 slice of the game binary." & return & return & "Do you still wish to proceed?"
+set gamePlistPath to (POSIX path of (path to home folder)) & "Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice/ADanceOfFireAndIce.app/Contents/Info.plist"
+try
+	set gameVersion to do shell script "/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' " & quoted form of gamePlistPath
+on error
+	set gameVersion to ""
+end try
+if gameVersion starts with "2." then
+	set confirmText to "Detected ADOFAI " & gameVersion & " (Unity 2022 build)." & return & return & "This script will install:" & return & "  - Homebrew (if not installed)" & return & "  - mono, expect, wget (if not installed)" & return & return & "On Apple Silicon, the arm64 slice of the game binary will be stripped so Steam launches under Rosetta (required for Harmony JIT patching on this build)." & return & return & "Do you still wish to proceed?"
+else
+	if gameVersion is "" then
+		set versionLine to "ADOFAI version not detected — defaulting to native installer."
+	else
+		set versionLine to "Detected ADOFAI " & gameVersion & " — using the native installer."
+	end if
+	set confirmText to versionLine & return & return & "This script will install:" & return & "  - Homebrew (if not installed)" & return & "  - git, .NET SDK (if not installed)" & return & return & "The native MacTuiInstaller from kkorenn/unity-mod-manager will be fetched and built, then run to patch the game." & return & return & "Do you still wish to proceed?"
+end if
 
 tell application "System Events"
 	activate

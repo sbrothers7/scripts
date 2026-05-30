@@ -17,21 +17,45 @@ if ! command -v brew &>/dev/null; then
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || eval "$(/usr/local/bin/brew shellenv)" 2>/dev/null
 fi
-command -v mono &>/dev/null || brew install mono
-command -v expect &>/dev/null || brew install expect
-command -v wget &>/dev/null || brew install wget
-command -v clang &>/dev/null || xcode-select --install
 
-echo "Downloading UnityModManager..."
-wget -q -O "$HOME/Downloads/UnityModManager.zip" "https://adof.ai/umm"
-rm -rf "$HOME/Downloads/UnityModManagerInstaller"
-unzip -o -q "$HOME/Downloads/UnityModManager.zip" -d "$HOME/Downloads/UnityModManagerInstaller"
+GAME_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist" 2>/dev/null)
+GAME_MAJOR="${GAME_VERSION%%.*}"
+echo "Detected ADOFAI version: ${GAME_VERSION:-unknown}"
 
-CONSOLE_EXE=$(find "$HOME/Downloads/UnityModManagerInstaller" -name "Console.exe" -maxdepth 3 | head -1)
-rm -f "$(dirname "$CONSOLE_EXE")/UnityModManagerConfigLocal.xml"
+# Reconcile launcher/real state from any previous run. If $EXE is the tiny
+# launcher (<30KB), restore the real binary back to $EXE; otherwise just
+# remove the stale .real file. Both paths below operate on a clean state where
+# $EXE is the canonical game binary and $REAL does not exist.
+if [ -f "$REAL" ]; then
+    EXE_SIZE=$(stat -f%z "$EXE" 2>/dev/null || echo 0)
+    if [ "$EXE_SIZE" -lt 30000 ]; then
+        echo "Restoring real binary from previous launcher install..."
+        rm -f "$EXE"
+        mv "$REAL" "$EXE"
+    else
+        echo "Removing stale .real from previous install..."
+        rm -f "$REAL"
+    fi
+fi
 
-echo "Patching UnityEngine.CoreModule.dll via UMM Console.exe..."
-expect <<EOF
+if [ "$GAME_MAJOR" = "2" ]; then
+    # ============================================================
+    # v2.x: legacy Unity 2022 build — Console.exe + arm64 strip
+    # ============================================================
+    command -v mono &>/dev/null || brew install mono
+    command -v expect &>/dev/null || brew install expect
+    command -v wget &>/dev/null || brew install wget
+
+    echo "Downloading UnityModManager..."
+    wget -q -O "$HOME/Downloads/UnityModManager.zip" "https://adof.ai/umm"
+    rm -rf "$HOME/Downloads/UnityModManagerInstaller"
+    unzip -o -q "$HOME/Downloads/UnityModManager.zip" -d "$HOME/Downloads/UnityModManagerInstaller"
+
+    CONSOLE_EXE=$(find "$HOME/Downloads/UnityModManagerInstaller" -name "Console.exe" -maxdepth 3 | head -1)
+    rm -f "$(dirname "$CONSOLE_EXE")/UnityModManagerConfigLocal.xml"
+
+    echo "Patching UnityEngine.CoreModule.dll via UMM Console.exe..."
+    expect <<EOF
 set timeout 30
 set env(TERM) dumb
 spawn mono "$CONSOLE_EXE"
@@ -67,82 +91,40 @@ expect {
 expect eof
 EOF
 
-GAME_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist" 2>/dev/null)
-GAME_MAJOR="${GAME_VERSION%%.*}"
-echo "Detected ADOFAI version: ${GAME_VERSION:-unknown}"
-
-# Reconcile state from any previous run. If a .real exists alongside $EXE:
-#   - If $EXE is tiny (<30KB): launcher from a previous 3.x install → restore .real to $EXE.
-#   - If $EXE is large, Steam restored the original binary via Verify Integrity → delete it.
-if [ -f "$REAL" ]; then
-    EXE_SIZE=$(stat -f%z "$EXE" 2>/dev/null || echo 0)
-    if [ "$EXE_SIZE" -lt 30000 ]; then
-        echo "Restoring real binary from previous launcher install..."
-        rm -f "$EXE"
-        mv "$REAL" "$EXE"
-    else
-        echo "Stale .real from previous install — removing..."
-        rm -f "$REAL"
+    if [ "$(uname -m)" = "arm64" ] && lipo -info "$EXE" 2>/dev/null | grep -q "arm64"; then
+        echo "Apple Silicon detected — stripping arm64 slice from game binary..."
+        lipo -remove arm64 "$EXE" -output "$EXE.tmp"
+        mv "$EXE.tmp" "$EXE"
+        chmod +x "$EXE"
     fi
-fi
-
-# Strip arm64 slice on Apple Silicon so Steam launches the x86_64 slice under Rosetta 
-# (Harmony's mprotect-based JIT patching fails under arm64 W^X)
-if [ "$(uname -m)" = "arm64" ] && lipo -info "$EXE" 2>/dev/null | grep -q "arm64"; then
-    echo "Apple Silicon detected — stripping arm64 slice from game binary..."
-    lipo -remove arm64 "$EXE" -output "$EXE.tmp"
-    mv "$EXE.tmp" "$EXE"
-    chmod +x "$EXE"
-fi
-
-if [ "$GAME_MAJOR" = "2" ]; then
-    echo "skipping mini launcher..."
 else
-    echo "Installing x86_64-only launcher (passes -force-metal so Rosetta uses Metal, not the unstable OpenGL fallback)..."
-    if [ ! -f "$REAL" ]; then
-        mv "$EXE" "$REAL"
+    # ============================================================
+    # v3.x+: Unity 6 build (use kkorenn/unity-mod-manager)
+    # ============================================================
+    command -v git &>/dev/null || brew install git
+    command -v dotnet &>/dev/null || brew install dotnet
+
+    CACHE_DIR="$HOME/.cache/adofai-umm-installer"
+    SRC_DIR="$CACHE_DIR/src"
+    INSTALLER_BIN="$CACHE_DIR/adofai-umm"
+
+    mkdir -p "$CACHE_DIR"
+    if [ ! -x "$INSTALLER_BIN" ]; then
+        echo "Fetching kkorenn/unity-mod-manager..."
+        rm -rf "$SRC_DIR"
+        git clone --depth=1 https://github.com/kkorenn/unity-mod-manager.git "$SRC_DIR"
+
+        echo "Building MacTuiInstaller (one-time, ~30-60s)..."
+        dotnet publish "$SRC_DIR/MacTuiInstaller/MacTuiInstaller.csproj" \
+            -c Release -r osx-arm64 --self-contained true \
+            -o "$CACHE_DIR/build" --nologo --verbosity quiet
+        cp "$CACHE_DIR/build/adofai-umm" "$INSTALLER_BIN"
+        chmod +x "$INSTALLER_BIN"
+        rm -rf "$SRC_DIR" "$CACHE_DIR/build"
     fi
-    SRC="/tmp/umm_adofai_launcher_$$.c"
-    cat > "$SRC" <<'LAUNCHER_C'
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <mach-o/dyld.h>
 
-int main(int argc, char **argv) {
-    char self[4096];
-    uint32_t sz = sizeof(self);
-    if (_NSGetExecutablePath(self, &sz) != 0) return 1;
-    char *slash = strrchr(self, '/');
-    if (!slash) return 1;
-    *slash = 0;
-    char real[4096];
-    snprintf(real, sizeof(real), "%s/ADanceOfFireAndIce.real", self);
-    char *newargv[256];
-    int i = 0;
-    newargv[i++] = real;
-    newargv[i++] = "-force-metal";
-    for (int j = 1; j < argc && i < 255; j++) newargv[i++] = argv[j];
-    newargv[i] = NULL;
-    execv(real, newargv);
-    perror("execv");
-    return 1;
-}
-LAUNCHER_C
-    clang -arch x86_64 -O2 -o "$EXE" "$SRC"
-    rm -f "$SRC"
-    chmod 755 "$EXE"
+    echo "Installing Unity Mod Manager via MacTuiInstaller..."
+    "$INSTALLER_BIN" --install --yes --game "$APP"
 fi
-
-echo "Re-signing .app bundle ad-hoc (strip stale signatures first so the new seal is honored)..."
-codesign --remove-signature "$APP" 2>/dev/null || true
-rm -rf "$APP/Contents/_CodeSignature"
-find "$APP" -type f \( -name "*.dylib" -o -name "*.bundle" \) -print0 2>/dev/null | while IFS= read -r -d '' f; do
-    codesign --remove-signature "$f" 2>/dev/null || true
-done
-codesign --remove-signature "$EXE" 2>/dev/null || true
-codesign --remove-signature "$REAL" 2>/dev/null || true
-[ -f "$REAL" ] && codesign --force --sign - "$REAL"
-codesign --force --deep --sign - "$APP"
 
 echo "Done! Launch the game via Steam and press Ctrl+F10 for the UMM menu."
